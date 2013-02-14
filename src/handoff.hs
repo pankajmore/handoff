@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveDataTypeable,DeriveGeneric #-}
+{-# LANGUAGE DeriveDataTypeable,DeriveGeneric,ScopedTypeVariables #-}
 import Control.Distributed.Process
 import Network.Transport.TCP
 import Control.Distributed.Process.Node (initRemoteTable,newLocalNode,forkProcess)
@@ -30,14 +30,14 @@ instance Binary Measurement where
              return DummyMeasurement
 instance Binary HandoffMsg where
     put x = case lookup x trohs of 
-              Just n -> put x
+              Just n -> put n
               Nothing -> case x of LinkActive pid -> put (7::Word8) >> put pid
                                    HOAck pid -> put (8::Word8) >> put pid
                                    HOCommand pid -> put (9::Word8) >> put pid
-    get = do x <- get :: Get Word8
-             case lookup x short of 
+    get = do n <- get :: Get Word8
+             case lookup n short of 
                       Just msg -> return msg
-                      Nothing -> case x of 7 -> do pid <- get ::  Get ProcessId
+                      Nothing -> case n of 7 -> do pid <- get ::  Get ProcessId
                                                    return $ LinkActive pid
                                            8 -> do pid <- get ::  Get ProcessId
                                                    return $ HOAck pid
@@ -50,13 +50,14 @@ msc = do
 --  liftIO $ print oldBSC
   go oldBSC newBSC 
  where
-  go oldBSC newBSC = do
+  go oldBSC (newBSC::ProcessId) = do
   self <- getSelfPid
   liftIO $ putStrLn $ "At MSC - " ++ show (self,oldBSC,newBSC)
   receiveWait
     [ match $ \(HOReq,oldBSC) -> do        
   liftIO $ log oldBSC self HOReq
   send newBSC (HOCommand',self)
+  --send newBSC ("Ack",self)
     , match $ \(HOAck newbs,newBSC) -> do 
   liftIO $ log newBSC self (HOAck newbs)
   send oldBSC (HOCommand newbs,self)
@@ -86,22 +87,21 @@ bsc = do
     [ match $ \(HOReq,oldBS) -> do
   liftIO $ log oldBS self HOReq 
   send msc (HOReq,self)
+    , match $ \(HOCommand',msc) -> do
+  liftIO $ log msc self HOCommand'
+  send bs (HOCommand',self)
     , match $ \(HOCommand newbs,msc) -> do
   liftIO $ log msc self (HOCommand newbs)
   send bs (HOAck newbs,self)
-  -- from here its for newbsc and newbs
-    , match $ \(HOCommand',msc) -> do
-  liftIO $ log msc self HOCommand'
-  send bs HOCommand'
     , match $ \(Activation,newbs) -> do
   liftIO $ log newbs self Activation
   send msc (HOAck newbs,self)
     , matchIf (\(HOConnect,pid) -> pid == bs) $ \(HOConnect,pid) -> do
   liftIO $ log pid self HOConnect
-  send msc HOConnect
+  send msc (HOConnect,self)
     , matchIf (\(HOConnect,pid) -> pid == msc) $ \(HOConnect,pid) -> do
   liftIO $ log pid self HOConnect
-  send bs Flush
+  send bs (Flush,self)
     , matchUnknown $ do
   liftIO $ putStrLn $ "Matched Unknown message at " ++ show (self,bs,msc)
     ]
@@ -111,14 +111,16 @@ ms :: Measurement -> Process ()
 ms measurement = do
   bs <- expect
   self <- getSelfPid
+  liftIO $ threadDelay 480000
+  send bs (measurement,self) 
   go bs measurement
  where
   go bs measurement = do
   self <- getSelfPid
-  liftIO $ threadDelay 4800000
+
   liftIO $ putStrLn $ "At MS - " ++ show (self,bs)
-  send bs (measurement,self) 
-  receiveTimeout 0
+
+  receiveWait
     [ match $ \(LinkActive newbs,bs) -> do
   liftIO $ log bs self (LinkActive newbs)
   send newbs (LinkActReq,self)
