@@ -10,39 +10,37 @@ import Control.Concurrent
 
 data Measurement = DummyMeasurement deriving (Show,Typeable,Generic)
 
-data HandoffMsg = HOCommand'
-                | HOReq 
-                | HOConnect
-                | Flush
-                | Activation
-                | LinkActReq
-                | LinkEstablished 
-                | LinkActive ProcessId
-                | HOAck ProcessId
-                | HOCommand ProcessId
-                deriving (Show,Typeable,Generic,Eq)
-short = zip [(0::Word8) ..]
-          [HOCommand', HOReq , HOConnect, Flush, Activation, LinkActReq, LinkEstablished]
-trohs = map (\(x,y)->(y,x)) short
-instance Binary Measurement where
-    put DummyMeasurement = put ()
-    get = do x <- get :: Get ()
-             return DummyMeasurement
-instance Binary HandoffMsg where
-    put x = case lookup x trohs of 
-              Just n -> put n
-              Nothing -> case x of LinkActive pid -> put (7::Word8) >> put pid
-                                   HOAck pid -> put (8::Word8) >> put pid
-                                   HOCommand pid -> put (9::Word8) >> put pid
-    get = do n <- get :: Get Word8
-             case lookup n short of 
-                      Just msg -> return msg
-                      Nothing -> case n of 7 -> do pid <- get ::  Get ProcessId
-                                                   return $ LinkActive pid
-                                           8 -> do pid <- get ::  Get ProcessId
-                                                   return $ HOAck pid
-                                           9 -> do pid <- get ::  Get ProcessId
-                                                   return $ HOCommand pid
+data HOCommand' = HOCommand' deriving (Show,Typeable,Generic,Eq)
+
+data HOReq = HOReq deriving (Show,Typeable,Generic,Eq)
+
+data HOConnect = HOConnect deriving (Show,Typeable,Generic,Eq)
+
+data Flush = Flush deriving (Show,Typeable,Generic,Eq)
+
+data Activation = Activation deriving (Show,Typeable,Generic,Eq)
+
+data LinkActReq = LinkActReq deriving (Show,Typeable,Generic,Eq)
+                
+data LinkEstablished =  LinkEstablished deriving (Show,Typeable,Generic,Eq)
+                
+data LinkActive = LinkActive ProcessId deriving (Show,Typeable,Generic,Eq)
+                
+data HOAck = HOAck ProcessId deriving (Show,Typeable,Generic,Eq)
+                
+data HOCommand = HOCommand ProcessId deriving (Show,Typeable,Generic,Eq)
+
+instance Binary Measurement
+instance Binary HOCommand'
+instance Binary HOReq
+instance Binary HOConnect
+instance Binary Flush
+instance Binary Activation
+instance Binary LinkActReq
+instance Binary LinkEstablished
+instance Binary LinkActive
+instance Binary HOAck
+instance Binary HOCommand
 
 msc :: Process ()
 msc = do 
@@ -102,6 +100,9 @@ bsc = do
     , matchIf (\(HOConnect,pid) -> pid == msc) $ \(HOConnect,pid) -> do
   liftIO $ log pid self HOConnect
   send bs (Flush,self)
+    , match $ \(Flush,oldbs) -> do
+  liftIO $ log oldbs self Flush
+  send msc (Flush,self)
     , matchUnknown $ do
   liftIO $ putStrLn $ "Matched Unknown message at " ++ show (self,bs,msc)
     ]
