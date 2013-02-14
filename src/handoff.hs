@@ -163,7 +163,7 @@ bs = do
   go bsc ms
 
 
-log :: ProcessId -> ProcessId -> HandoffMsg -> IO ()
+log :: (Show a) => ProcessId -> ProcessId -> a -> IO ()
 log from to msg = putStrLn $ show to ++ " <--- " ++ show from ++ " ---- " ++ show msg
 
 master :: Process ()
