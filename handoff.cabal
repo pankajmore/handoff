@@ -3,18 +3,19 @@
 
 name:                handoff
 version:             0.1.0.0
--- synopsis:            
--- description:         
--- license:             
+synopsis:            Handoff Simulation            
+description:         Handoff Simulation
+license:             BSD3
 license-file:        LICENSE
 author:              Pankaj More
 maintainer:          pankajm@cse.iitk.ac.in
 -- copyright:           
--- category:            
+category:            Network
 build-type:          Simple
 cabal-version:       >=1.8
-
+source-repository:   http://github.com/pankajmore
 executable handoff
-  -- main-is:             
+  main-is:           handoff.hs             
   -- other-modules:       
-  build-depends:       base ==4.6.*
+  build-depends:       base ==4.6.*,binary,distributed-process,network-transport-tcp
+  hs-source-dirs:      src
