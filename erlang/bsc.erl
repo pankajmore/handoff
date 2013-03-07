@@ -11,7 +11,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/1, hoReq/1, hoCommand/1, hoConnect/2, hoConn/2]).
+-export([start_link/0, hoReq/1, hoCommand/1, hoConnect/2, hoConn/2, joinMSC/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -19,7 +19,7 @@
 
 -define(SERVER, ?MODULE). 
 
--record(state, {msc,bs}).
+-record(state, {msc,bs=[]}).
 
 %%%===================================================================
 %%% API
@@ -32,8 +32,8 @@
 %% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
-start_link(MSCId) ->
-    gen_server:start_link(?MODULE, [MSCId], [{debug, [trace]}]).
+start_link() ->
+    gen_server:start_link(?MODULE, [], [{debug, [trace]}]).
 
 hoReq(Pid) ->
     gen_server:call(Pid, hoReq). 
@@ -46,6 +46,9 @@ hoConnect(Pid,FlushPayload) ->
 
 hoConn(Pid, FlushPayload) ->
     gen_server:cast(Pid, {hoConn, FlushPayload}).
+
+joinMSC(Pid, MSCId) ->
+    gen_server:cast(Pid, {joinMSC, MSCId}).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -62,10 +65,8 @@ hoConn(Pid, FlushPayload) ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
-init([MSCId]) ->
-    {ok, BSId} = bs:start_link(self()),
-    io:format("The BSId is ~p~n",[BSId]),
-    {ok, #state{msc=MSCId,bs=BSId}}.
+init([]) ->
+    {ok, #state{}}.
 
 
 %%--------------------------------------------------------------------
@@ -92,7 +93,7 @@ handle_call(hoReq, _From, State) ->
             error(baplyfromMSC) 
     end; 
 handle_call(hoCommand, _From, State) ->
-    case bs:hoCommand(State#state.bs) of
+    case bs:hoCommand(hd(State#state.bs)) of
         {activation, Payload} ->
             {reply, {hoAck, Payload}, State}; 
         noFreeChannel ->
@@ -114,13 +115,17 @@ handle_cast({hoConnect,FlushPayload}, State) ->
     {noreply, State};
 handle_cast({hoConn,FlushPayload}, State) ->
     %% TODO : Choose the correct BS
-    case bs:flush(State#state.bs,FlushPayload) of 
+    case bs:flush(hd(State#state.bs),FlushPayload) of 
         flush ->
             msc:flush(State#state.msc);
         _ ->
             error(baderrornearflushatbsc)
     end,
-    {noreply, State}.
+    {noreply, State};
+handle_cast({joinMSC, MSCId}, State) ->
+    MSCId ! {acceptBSC, self()},
+    {noreply, State#state{msc=MSCId}}.
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -132,8 +137,8 @@ handle_cast({hoConn,FlushPayload}, State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_info(_Info, State) ->
-    {noreply, State}.
+handle_info({acceptBS, BSId}, State) ->
+    {noreply, State#state{bs = [BSId|State#state.bs]}}.
 
 %%--------------------------------------------------------------------
 %% @private

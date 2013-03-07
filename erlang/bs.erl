@@ -11,7 +11,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/1, measurement/1, hoCommand/1, linkActivationReq/2, flush/2, alloc/1]).
+-export([start_link/0, measurement/1, hoCommand/1, linkActivationReq/2, flush/2, alloc/1, joinBSC/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -32,8 +32,8 @@
 %% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
-start_link(BSCId) ->
-    gen_server:start_link(?MODULE, [BSCId], [{debug, [trace]}]).
+start_link() ->
+    gen_server:start_link(?MODULE, [], [{debug, [trace]}]).
 
 measurement(Pid) ->
      gen_server:call(Pid,measurement). 
@@ -50,6 +50,9 @@ flush(Pid, FlushPayload) ->
 alloc(Pid) ->
     gen_server:call(Pid, alloc).
 
+joinBSC(Pid, BSCId) ->
+    gen_server:cast(Pid,{joinBSC,BSCId}).
+
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
@@ -65,8 +68,8 @@ alloc(Pid) ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
-init([BSCId]) ->
-    {ok, #state{bsc=BSCId}}.
+init([]) ->
+    {ok, #state{}}.
 
 
 %%--------------------------------------------------------------------
@@ -134,11 +137,12 @@ handle_call({flush, MHId}, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_cast(_Msg, State) ->
-    {noreply, State}.
+handle_cast({joinBSC,BSCId}, State) ->
+    BSCId ! {acceptBS, self()},
+    {noreply, State#state{bsc=BSCId}}.
 
 %%--------------------------------------------------------------------
-%% @private
+%% @Private
 %% @doc
 %% Handling all non call/cast messages
 %%

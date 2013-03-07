@@ -19,7 +19,7 @@
 
 -define(SERVER, ?MODULE). 
 
--record(state, {bsc}).
+-record(state, {bsc=[]}).
 
 %%%===================================================================
 %%% API
@@ -60,11 +60,7 @@ flush(Pid) ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-    {ok, BSC1Id} = bsc:start_link(self()),
-    {ok, BSC2Id} = bsc:start_link(self()),
-    io:format("The pid of bsc1 is ~p~n ", [BSC1Id]),
-    io:format("The pid of bsc2 is ~p~n ", [BSC2Id]),
-    {ok, #state{bsc=[BSC1Id,BSC2Id]}}.
+    {ok, #state{bsc=[]}}.
 
 
 %%--------------------------------------------------------------------
@@ -81,8 +77,9 @@ init([]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_call(hoReq, _From, State) ->
-    case bsc:hoCommand(lists:nth(2, State#state.bsc)) of
+handle_call(hoReq, From, State) ->
+    CandidateBSCs = State#state.bsc -- [From],
+    case bsc:hoCommand(lists:nth(1, CandidateBSCs)) of
         {hoAck, Payload} -> 
             {reply, {hoCommand, Payload}, State};
         dropCall ->
@@ -118,8 +115,8 @@ handle_cast(flush, State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_info(_Info, State) ->
-    {noreply, State}.
+handle_info({acceptBSC, BSCId}, State) ->
+    {noreply, State#state{bsc= [BSCId|State#state.bsc]}}.
 
 %%--------------------------------------------------------------------
 %% @private
